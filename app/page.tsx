@@ -370,42 +370,155 @@ async function loadRecommendations() {
     router.push(`/directions?to=${buildingId}`);
   }
 
-  // ENHANCED RECOMMENDATIONS PANEL
-  function RecommendationsPanel() {
-    if (!showRecommendations || recommendations.length === 0) return null;
+// Replace your RecommendationsPanel with this mobile-optimized version
 
-    const getMessage = () => {
-      if (searchQuery && visibleBuildings.length === 0) {
-        return {
-          title: "🔍 Nothing found?",
-          subtitle: "Try these popular locations instead"
-        };
-      }
-      
-      if (visibleBuildings.length === 0 && !loading) {
-        return {
-          title: "👋 Welcome to DeKUT!",
-          subtitle: "Start exploring popular campus locations"
-        };
-      }
+function RecommendationsPanel() {
+  if (!showRecommendations || recommendations.length === 0) return null;
 
+  const getMessage = () => {
+    if (searchQuery && visibleBuildings.length === 0) {
       return {
-        title: "⭐ Recommended Places",
-        subtitle: "Popular campus locations"
+        title: "🔍 Nothing found?",
+        subtitle: "Try these popular locations instead"
       };
+    }
+    
+    if (visibleBuildings.length === 0 && !loading) {
+      return {
+        title: "👋 Welcome to DeKUT!",
+        subtitle: "Start exploring popular campus locations"
+      };
+    }
+
+    return {
+      title: "⭐ Recommended Places",
+      subtitle: "Popular campus locations"
     };
+  };
 
-    const message = getMessage();
+  const message = getMessage();
 
-    // Group recommendations by type
-    const grouped: { [key: string]: typeof recommendations } = {};
-    recommendations.forEach(rec => {
-      if (!grouped[rec.type]) grouped[rec.type] = [];
-      grouped[rec.type].push(rec);
-    });
+  // Group recommendations by type
+  const grouped: { [key: string]: typeof recommendations } = {};
+  recommendations.forEach(rec => {
+    if (!grouped[rec.type]) grouped[rec.type] = [];
+    grouped[rec.type].push(rec);
+  });
 
-    return (
-      <div className="absolute top-24 left-4 z-30 bg-white rounded-lg shadow-xl max-w-sm w-full max-h-[60vh] overflow-hidden flex flex-col animate-slideIn">
+  return (
+    <>
+      {/* MOBILE: Bottom sheet */}
+      <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 bg-white rounded-t-2xl shadow-2xl max-h-[70vh] flex flex-col animate-slideUp">
+        {/* Drag handle */}
+        <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2"></div>
+        
+        {/* Header */}
+        <div className="px-4 py-3 border-b bg-gradient-to-r from-cyan-600 to-cyan-700 rounded-t-2xl">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h3 className="text-base font-bold text-white">
+                {message.title}
+              </h3>
+              <p className="text-cyan-100 text-xs mt-0.5">
+                {message.subtitle}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowRecommendations(false)}
+              className="p-2 hover:bg-cyan-800 rounded-full transition-colors ml-2"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* Quick stats */}
+        <div className="px-4 py-2 bg-cyan-50 border-b text-xs">
+          <span className="text-gray-600">
+            📍 {recommendations.length} locations
+          </span>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto">
+          {Object.entries(grouped).map(([type, items]) => (
+            <div key={type}>
+              <div className="px-4 py-2 bg-gray-100 border-b sticky top-0">
+                <h4 className="text-xs font-semibold text-gray-700 uppercase">
+                  {type} ({items.length})
+                </h4>
+              </div>
+              
+              {items.map((rec) => (
+                <button
+                  key={`${rec.source_type}-${rec.source_id}`}
+                  onClick={() => {
+                    if (rec.source_type === 'building') {
+                      const building = allBuildings.find(b => b.id === rec.source_id);
+                      if (building) {
+                        setMapCenter([rec.lat, rec.lng]);
+                        setMapZoom(19);
+                        setSelectedBuildingId(rec.source_id);
+                        setVisibleBuildings([building]);
+                        setShowRecommendations(false);
+                        setSearchQuery(rec.name);
+                      }
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 border-b transition-colors flex items-center gap-3"
+                >
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: `${rec.color}20` }}
+                  >
+                    <span className="text-lg">{rec.icon}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-sm text-gray-900 truncate">
+                      {rec.name}
+                    </h4>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span
+                        className="inline-block px-1.5 py-0.5 text-xs font-medium rounded"
+                        style={{
+                          backgroundColor: `${rec.color}20`,
+                          color: rec.color
+                        }}
+                      >
+                        {rec.category}
+                      </span>
+                      {rec.facilities_count > 0 && (
+                        <span className="text-xs text-gray-500">
+                          {rec.facilities_count}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="p-3 border-t bg-white">
+          <button
+            onClick={() => {
+              setShowRecommendations(false);
+              router.push('/buildings');
+            }}
+            className="w-full px-4 py-2.5 text-sm font-medium text-cyan-600 hover:bg-cyan-50 active:bg-cyan-100 rounded-lg transition-colors"
+          >
+            View All Buildings →
+          </button>
+        </div>
+      </div>
+
+      {/* DESKTOP: Side panel */}
+      <div className="hidden sm:block absolute top-24 left-4 z-30 bg-white rounded-lg shadow-xl max-w-sm w-full max-h-[60vh] overflow-hidden flex-col animate-slideIn">
         {/* Header */}
         <div className="p-4 border-b bg-gradient-to-r from-cyan-600 to-cyan-700">
           <div className="flex items-center justify-between">
@@ -436,8 +549,8 @@ async function loadRecommendations() {
           </div>
         </div>
 
-        {/* List grouped by type */}
-        <div className="flex-1 overflow-y-auto">
+        {/* List */}
+        <div className="flex-1 overflow-y-auto max-h-[calc(60vh-200px)]">
           {Object.entries(grouped).map(([type, items]) => (
             <div key={type}>
               <div className="px-4 py-2 bg-gray-50 border-b sticky top-0">
@@ -487,7 +600,7 @@ async function loadRecommendations() {
                       </span>
                       {rec.facilities_count > 0 && (
                         <span className="text-xs text-gray-500">
-                          🏢 {rec.facilities_count} facilities
+                          🏢 {rec.facilities_count} {rec.facilities_count === 1 ? 'facility' : 'facilities'}
                         </span>
                       )}
                     </div>
@@ -518,9 +631,9 @@ async function loadRecommendations() {
           </button>
         </div>
       </div>
-    );
-  }
-
+    </>
+  );
+}
   // ROUTE INFO PANEL
   function RouteInfoPanel() {
     if (!activeRoute) return null;
