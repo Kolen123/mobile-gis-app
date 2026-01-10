@@ -1,7 +1,6 @@
-// app/page.tsx
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Sidebar } from '@/components/Sidebar';
@@ -17,7 +16,10 @@ import {
   X,
   Navigation,
   Star,
-  ChevronRight, 
+  ChevronRight,
+  MapPin,
+  Heart,
+  Building2,
 } from 'lucide-react';
 
 const Map = dynamic(() => import('@/components/Map').then(mod => ({ default: mod.Map })), {
@@ -107,7 +109,6 @@ function MapPageContent() {
 
       return () => clearTimeout(timer);
     } else {
-      // Hide recommendations when showing buildings
       if (visibleBuildings.length > 0) {
         setShowRecommendations(false);
       }
@@ -237,65 +238,57 @@ function MapPageContent() {
       setLoading(false);
     }
   }
-function getUserLocation() {
-  if (navigator.geolocation) {
-    console.log('📡 Getting your location...');
-    
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const userCoords: [number, number] = [
-          position.coords.latitude,
-          position.coords.longitude
-        ];
-        
-        console.log('✅ LOCATION FOUND:', userCoords);
-        console.log('📍 Accuracy:', Math.round(position.coords.accuracy), 'm');
-        
-        setUserLocation(userCoords);
-        setMapCenter(userCoords);
-        setMapZoom(18);
-      },
-      (error) => {
-        console.error('Location failed, using campus center');
-        
-        // FALLBACK: Use DeKUT campus center
-        const campusCoords: [number, number] = [-0.3959, 36.9636];
-        
-        setUserLocation(campusCoords);
-        setMapCenter(campusCoords);
-        setMapZoom(17);
-        
-        alert('📍 Showing DeKUT campus area (location unavailable)');
-      },
-      {
-        enableHighAccuracy: false,  // Less demanding
-        timeout: 30000,             // 30 seconds
-        maximumAge: 60000           // Accept cached location
-      }
-    );
-  } else {
-    const campusCoords: [number, number] = [-0.3959, 36.9636];
-    setUserLocation(campusCoords);
-    setMapCenter(campusCoords);
-    setMapZoom(17);
-  }
-}
-async function loadRecommendations() {
-  try {
-    const { data } = await supabase
-      .from('v_map_recommendations')
-      .select('*')
-      .order('priority')
-      .order('name')
-      .limit(10);
 
-    if (data) {
-      setRecommendations(data);
+  function getUserLocation() {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const userCoords: [number, number] = [
+            position.coords.latitude,
+            position.coords.longitude
+          ];
+          
+          setUserLocation(userCoords);
+          setMapCenter(userCoords);
+          setMapZoom(18);
+        },
+        (error) => {
+          const campusCoords: [number, number] = [-0.3959, 36.9636];
+          setUserLocation(campusCoords);
+          setMapCenter(campusCoords);
+          setMapZoom(17);
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 30000,
+          maximumAge: 60000
+        }
+      );
+    } else {
+      const campusCoords: [number, number] = [-0.3959, 36.9636];
+      setUserLocation(campusCoords);
+      setMapCenter(campusCoords);
+      setMapZoom(17);
     }
-  } catch (error) {
-    console.error('Error loading recommendations:', error);
   }
-}
+
+  async function loadRecommendations() {
+    try {
+      const { data } = await supabase
+        .from('v_map_recommendations')
+        .select('*')
+        .order('priority')
+        .order('name')
+        .limit(10);
+
+      if (data) {
+        setRecommendations(data);
+      }
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
+    }
+  }
+
   async function handleSearch(query: string) {
     setSearchQuery(query);
     
@@ -327,7 +320,6 @@ async function loadRecommendations() {
       setShowSearchResults(true);
       setVisibleBuildings(buildings);
       
-      // Show recommendations if no results
       if (buildings.length === 0) {
         setTimeout(() => setShowRecommendations(true), 500);
       }
@@ -370,28 +362,106 @@ async function loadRecommendations() {
     router.push(`/directions?to=${buildingId}`);
   }
 
-// Replace your RecommendationsPanel with this mobile-optimized version
+ // FIXED RecommendationsPanel Component
+// Replace the entire RecommendationsPanel function in your page.tsx
 
 function RecommendationsPanel() {
   if (!showRecommendations || recommendations.length === 0) return null;
+
+  const [snapPosition, setSnapPosition] = useState<'collapsed' | 'half' | 'expanded'>('half');
+  const [isDragging, setIsDragging] = useState(false);
+  const [startY, setStartY] = useState(0);
+  const [currentY, setCurrentY] = useState(0);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  const snapPositions = {
+    collapsed: 15,
+    half: 35,
+    expanded: 70
+  };
+
+  // Calculate current height during drag
+  const currentHeight = isDragging 
+    ? Math.max(15, Math.min(85, snapPositions[snapPosition] + ((startY - currentY) / window.innerHeight) * 100))
+    : snapPositions[snapPosition];
+
+  // Touch handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    setStartY(e.touches[0].clientY);
+    setCurrentY(e.touches[0].clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    setCurrentY(e.touches[0].clientY);
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    const diff = startY - currentY;
+    const threshold = 50;
+
+    // If movement is too small, don't change position
+    if (Math.abs(diff) < threshold) {
+      return;
+    }
+
+    // Snap to nearest position based on drag direction
+    if (diff > 0) {
+      // Swiping up
+      if (snapPosition === 'collapsed') setSnapPosition('half');
+      else if (snapPosition === 'half') setSnapPosition('expanded');
+    } else {
+      // Swiping down
+      if (snapPosition === 'expanded') setSnapPosition('half');
+      else if (snapPosition === 'half') setSnapPosition('collapsed');
+    }
+  };
+
+  // Mouse handlers for desktop testing
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setStartY(e.clientY);
+    setCurrentY(e.clientY);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setCurrentY(e.clientY);
+  };
+
+  const handleMouseUp = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    const diff = startY - currentY;
+    const threshold = 50;
+
+    if (Math.abs(diff) < threshold) {
+      return;
+    }
+
+    if (diff > 0) {
+      if (snapPosition === 'collapsed') setSnapPosition('half');
+      else if (snapPosition === 'half') setSnapPosition('expanded');
+    } else {
+      if (snapPosition === 'expanded') setSnapPosition('half');
+      else if (snapPosition === 'half') setSnapPosition('collapsed');
+    }
+  };
 
   const getMessage = () => {
     if (searchQuery && visibleBuildings.length === 0) {
       return {
         title: "🔍 Nothing found?",
-        subtitle: "Try these popular locations instead"
+        subtitle: "Try these popular locations"
       };
     }
-    
-    if (visibleBuildings.length === 0 && !loading) {
-      return {
-        title: "👋 Welcome to DeKUT!",
-        subtitle: "Start exploring popular campus locations"
-      };
-    }
-
     return {
-      title: "⭐ Recommended Places",
+      title: "👋 Welcome to DeKUT!",
       subtitle: "Popular campus locations"
     };
   };
@@ -406,234 +476,121 @@ function RecommendationsPanel() {
   });
 
   return (
-    <>
-      {/* MOBILE: Bottom sheet */}
-      <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 bg-white rounded-t-2xl shadow-2xl max-h-[70vh] flex flex-col animate-slideUp">
-        {/* Drag handle */}
-        <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2"></div>
-        
-        {/* Header */}
-        <div className="px-4 py-3 border-b bg-gradient-to-r from-cyan-600 to-cyan-700 rounded-t-2xl">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <h3 className="text-base font-bold text-white">
-                {message.title}
-              </h3>
-              <p className="text-cyan-100 text-xs mt-0.5">
-                {message.subtitle}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowRecommendations(false)}
-              className="p-2 hover:bg-cyan-800 rounded-full transition-colors ml-2"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
-          </div>
-        </div>
-
-        {/* Quick stats */}
-        <div className="px-4 py-2 bg-cyan-50 border-b text-xs">
-          <span className="text-gray-600">
-            📍 {recommendations.length} locations
-          </span>
-        </div>
-
-        {/* List */}
-        <div className="flex-1 overflow-y-auto">
-          {Object.entries(grouped).map(([type, items]) => (
-            <div key={type}>
-              <div className="px-4 py-2 bg-gray-100 border-b sticky top-0">
-                <h4 className="text-xs font-semibold text-gray-700 uppercase">
-                  {type} ({items.length})
-                </h4>
-              </div>
-              
-              {items.map((rec) => (
-                <button
-                  key={`${rec.source_type}-${rec.source_id}`}
-                  onClick={() => {
-                    if (rec.source_type === 'building') {
-                      const building = allBuildings.find(b => b.id === rec.source_id);
-                      if (building) {
-                        setMapCenter([rec.lat, rec.lng]);
-                        setMapZoom(19);
-                        setSelectedBuildingId(rec.source_id);
-                        setVisibleBuildings([building]);
-                        setShowRecommendations(false);
-                        setSearchQuery(rec.name);
-                      }
-                    }
-                  }}
-                  className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 border-b transition-colors flex items-center gap-3"
-                >
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${rec.color}20` }}
-                  >
-                    <span className="text-lg">{rec.icon}</span>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-sm text-gray-900 truncate">
-                      {rec.name}
-                    </h4>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span
-                        className="inline-block px-1.5 py-0.5 text-xs font-medium rounded"
-                        style={{
-                          backgroundColor: `${rec.color}20`,
-                          color: rec.color
-                        }}
-                      >
-                        {rec.category}
-                      </span>
-                      {rec.facilities_count > 0 && (
-                        <span className="text-xs text-gray-500">
-                          {rec.facilities_count}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 border-t bg-white">
-          <button
-            onClick={() => {
-              setShowRecommendations(false);
-              router.push('/buildings');
-            }}
-            className="w-full px-4 py-2.5 text-sm font-medium text-cyan-600 hover:bg-cyan-50 active:bg-cyan-100 rounded-lg transition-colors"
-          >
-            View All Buildings →
-          </button>
-        </div>
+    <div 
+      ref={sheetRef}
+      className="fixed inset-x-0 bottom-0 z-30 bg-white rounded-t-3xl shadow-2xl"
+      style={{ 
+        height: `${currentHeight}vh`,
+        transition: isDragging ? 'none' : 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        touchAction: 'none' // Prevents scrolling while dragging
+      }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
+      {/* Drag Handle */}
+      <div 
+        className="w-full py-4 cursor-grab active:cursor-grabbing flex justify-center items-center select-none"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        style={{ touchAction: 'none' }}
+      >
+        <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
       </div>
-
-      {/* DESKTOP: Side panel */}
-      <div className="hidden sm:block absolute top-24 left-4 z-30 bg-white rounded-lg shadow-xl max-w-sm w-full max-h-[60vh] overflow-hidden flex-col animate-slideIn">
-        {/* Header */}
-        <div className="p-4 border-b bg-gradient-to-r from-cyan-600 to-cyan-700">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white">
-              {message.title}
-            </h3>
-            <button
-              onClick={() => setShowRecommendations(false)}
-              className="p-1 hover:bg-cyan-800 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
-          </div>
-          <p className="text-cyan-100 text-sm mt-1">
-            {message.subtitle}
+      
+      {/* Header */}
+      <div className="px-4 pb-3 flex items-center justify-between border-b">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-gray-900">
+            {message.title}
+          </h3>
+          <p className="text-sm text-gray-500">
+            📍 {recommendations.length} locations
           </p>
         </div>
+        <button
+          onClick={() => setShowRecommendations(false)}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <X className="w-5 h-5 text-gray-600" />
+        </button>
+      </div>
 
-        {/* Quick stats */}
-        <div className="px-4 py-3 bg-cyan-50 border-b">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">
-              📍 {recommendations.length} locations available
-            </span>
-            <span className="text-cyan-600 font-medium">
-              Tap to explore
-            </span>
-          </div>
-        </div>
-
-        {/* List */}
-        <div className="flex-1 overflow-y-auto max-h-[calc(60vh-200px)]">
-          {Object.entries(grouped).map(([type, items]) => (
-            <div key={type}>
-              <div className="px-4 py-2 bg-gray-50 border-b sticky top-0">
-                <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                  {type} ({items.length})
-                </h4>
-              </div>
-              
-              {items.map((rec) => (
-                <button
-                  key={`${rec.source_type}-${rec.source_id}`}
-                  onClick={() => {
-                    if (rec.source_type === 'building') {
-                      const building = allBuildings.find(b => b.id === rec.source_id);
-                      if (building) {
-                        setMapCenter([rec.lat, rec.lng]);
-                        setMapZoom(19);
-                        setSelectedBuildingId(rec.source_id);
-                        setVisibleBuildings([building]);
-                        setShowRecommendations(false);
-                        setSearchQuery(rec.name);
-                      }
+      {/* Scrollable Content */}
+      <div 
+        className="overflow-y-auto" 
+        style={{ 
+          height: `calc(${currentHeight}vh - 100px)`,
+          overscrollBehavior: 'contain' // Prevents parent scrolling
+        }}
+      >
+        {Object.entries(grouped).map(([type, items]) => (
+          <div key={type}>
+            <div className="px-4 py-2 bg-gray-50 sticky top-0 z-10">
+              <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                {type} ({items.length})
+              </h4>
+            </div>
+            
+            {items.map((rec) => (
+              <button
+                key={`${rec.source_type}-${rec.source_id}`}
+                onClick={() => {
+                  if (rec.source_type === 'building') {
+                    const building = allBuildings.find(b => b.id === rec.source_id);
+                    if (building) {
+                      setMapCenter([rec.lat, rec.lng]);
+                      setMapZoom(19);
+                      setSelectedBuildingId(rec.source_id);
+                      setVisibleBuildings([building]);
+                      setShowRecommendations(false);
+                      setSearchQuery(rec.name);
                     }
-                  }}
-                  className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b transition-colors flex items-start gap-3 group"
+                  }
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 border-b flex items-center gap-3 transition-colors"
+              >
+                <div
+                  className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: `${rec.color}20` }}
                 >
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
-                    style={{ backgroundColor: `${rec.color}20` }}
-                  >
-                    <span className="text-xl">{rec.icon}</span>
-                  </div>
+                  <span className="text-xl">{rec.icon}</span>
+                </div>
 
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-gray-900 truncate group-hover:text-cyan-600 transition-colors">
-                      {rec.name}
-                    </h4>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span
-                        className="inline-block px-2 py-0.5 text-xs font-medium rounded-full"
-                        style={{
-                          backgroundColor: `${rec.color}20`,
-                          color: rec.color
-                        }}
-                      >
-                        {rec.category}
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-gray-900 truncate">
+                    {rec.name}
+                  </h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span
+                      className="inline-block px-2 py-0.5 text-xs font-medium rounded"
+                      style={{
+                        backgroundColor: `${rec.color}20`,
+                        color: rec.color
+                      }}
+                    >
+                      {rec.category}
+                    </span>
+                    {rec.facilities_count > 0 && (
+                      <span className="text-xs text-gray-500">
+                        • {rec.facilities_count} facilities
                       </span>
-                      {rec.facilities_count > 0 && (
-                        <span className="text-xs text-gray-500">
-                          🏢 {rec.facilities_count} {rec.facilities_count === 1 ? 'facility' : 'facilities'}
-                        </span>
-                      )}
-                    </div>
-                    {rec.description && (
-                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                        {rec.description}
-                      </p>
                     )}
                   </div>
+                </div>
 
-                  <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 mt-2 group-hover:text-cyan-600 group-hover:translate-x-1 transition-all" />
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 border-t bg-gray-50">
-          <button
-            onClick={() => {
-              setShowRecommendations(false);
-              router.push('/buildings');
-            }}
-            className="w-full px-4 py-2 text-sm font-medium text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors"
-          >
-            View All Buildings →
-          </button>
-        </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        ))}
       </div>
-    </>
+    </div>
   );
 }
+
   // ROUTE INFO PANEL
   function RouteInfoPanel() {
     if (!activeRoute) return null;
@@ -698,11 +655,11 @@ function RecommendationsPanel() {
     const durationMin = Math.ceil(route.duration / 60);
 
     return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
+        <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg sm:w-full max-h-[85vh] flex flex-col">
           <div className="p-6 border-b">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-2xl font-bold text-gray-900">Turn-by-Turn Directions</h2>
+              <h2 className="text-xl font-bold text-gray-900">Turn-by-Turn Directions</h2>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -720,7 +677,7 @@ function RecommendationsPanel() {
             <div className="space-y-4">
               {route.steps.map((step, index) => (
                 <div key={index} className="flex items-start gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-cyan-600 text-white rounded-full flex items-center justify-center font-bold">
+                  <div className="flex-shrink-0 w-8 h-8 bg-cyan-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
                     {index + 1}
                   </div>
                   <div className="flex-1 pt-1">
@@ -738,7 +695,7 @@ function RecommendationsPanel() {
             </div>
           </div>
 
-          <div className="p-6 border-t">
+          <div className="p-4 border-t">
             <button
               onClick={onClose}
               className="w-full px-6 py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors"
@@ -755,24 +712,26 @@ function RecommendationsPanel() {
     <div className="relative h-screen w-full overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="relative h-full">
+      <div className="relative h-full flex flex-col">
+        {/* Navigation Active Banner */}
         {isNavigating && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-cyan-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              <span className="font-medium">Navigation Active</span>
+              <span className="font-medium text-sm">Navigation Active</span>
             </div>
             <button
               onClick={exitNavigationMode}
               className="p-1 hover:bg-cyan-700 rounded-full transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
+        {/* Search Bar */}
         <div className="absolute top-0 left-0 right-0 z-30">
-          <div className="bg-white shadow-lg m-4 rounded-lg">
+          <div className="bg-white shadow-lg m-4 rounded-xl">
             <div className="flex items-center gap-2 p-3">
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -786,12 +745,12 @@ function RecommendationsPanel() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search buildings to show on map..."
+                    placeholder="Search buildings..."
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}
                     onFocus={() => searchQuery && setShowSearchResults(true)}
                     disabled={isNavigating}
-                    className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 text-sm"
                   />
                 </div>
 
@@ -820,7 +779,7 @@ function RecommendationsPanel() {
               <button
                 onClick={() => setShowRecommendations(!showRecommendations)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Show Recommendations"
+                title="Recommendations"
               >
                 <Star className={`w-6 h-6 ${showRecommendations ? 'text-yellow-500 fill-yellow-500' : 'text-gray-700'}`} />
               </button>
@@ -828,7 +787,7 @@ function RecommendationsPanel() {
               {visibleBuildings.length > 0 && !isNavigating && (
                 <button
                   onClick={clearMap}
-                  className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
                 >
                   Clear
                 </button>
@@ -837,9 +796,11 @@ function RecommendationsPanel() {
           </div>
         </div>
 
+        {/* Recommendations Panel */}
         <RecommendationsPanel />
 
-        <div className="absolute inset-0">
+        {/* Map */}
+        <div className="flex-1">
           {loading ? (
             <div className="w-full h-full flex items-center justify-center bg-gray-100">
               <Loader2 className="w-12 h-12 animate-spin text-cyan-600" />
@@ -858,6 +819,7 @@ function RecommendationsPanel() {
           )}
         </div>
 
+        {/* Map Controls */}
         <div className="absolute right-4 top-24 z-20 flex flex-col gap-2">
           <button 
             onClick={handleLocateMe}
@@ -870,49 +832,66 @@ function RecommendationsPanel() {
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             <button 
               onClick={() => setMapZoom(prev => Math.min(prev + 1, 19))}
-              className="p-3 hover:bg-gray-50 transition-colors border-b"
+              className="p-3 hover:bg-gray-50 transition-colors border-b w-full"
             >
               <Plus className="w-6 h-6 text-gray-700" />
             </button>
             <button 
               onClick={() => setMapZoom(prev => Math.max(prev - 1, 10))}
-              className="p-3 hover:bg-gray-50 transition-colors"
+              className="p-3 hover:bg-gray-50 transition-colors w-full"
             >
               <Minus className="w-6 h-6 text-gray-700" />
             </button>
           </div>
         </div>
 
+        {/* Route Info Panel */}
         {isNavigating && <RouteInfoPanel />}
 
+        {/* Bottom Navigation - Clean & Fixed */}
         {!isNavigating && (
-          <div className="absolute bottom-6 left-0 right-0 z-20 px-4">
-            <div className="bg-white rounded-full shadow-xl p-2 flex items-center justify-center gap-2 max-w-md mx-auto">
+          <div className="absolute bottom-0 left-0 right-0 z-20 bg-white border-t safe-area-bottom">
+            <div className="flex items-center justify-around py-3 px-4">
+              <button
+                onClick={() => setShowRecommendations(!showRecommendations)}
+                className="flex-1 px-4 py-3 rounded-full font-medium text-cyan-600 hover:bg-cyan-50 active:bg-cyan-100 transition-colors text-sm"
+              >
+                ðŸ" Explore
+              </button>
+              
+              <div className="w-px h-8 bg-gray-200" />
+              
               <button
                 onClick={() => router.push('/buildings')}
-                className="flex-1 px-4 py-2 rounded-full font-medium text-cyan-600 hover:bg-cyan-50 transition-colors"
+                className="flex-1 px-4 py-3 rounded-full font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors text-sm"
               >
-                All Buildings
+                🏛️ All Buildings
               </button>
-              <div className="w-px h-6 bg-gray-300" />
+              
+              <div className="w-px h-8 bg-gray-200" />
+              
               <button
                 onClick={() => router.push('/favorites')}
-                className="flex-1 px-4 py-2 rounded-full font-medium text-cyan-600 hover:bg-cyan-50 transition-colors"
+                className="flex-1 px-4 py-3 rounded-full font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors text-sm"
               >
-                Favorites
+                â­ Favorites
               </button>
             </div>
           </div>
         )}
 
+        {/* Empty State Message */}
         {visibleBuildings.length === 0 && !loading && !isNavigating && !showRecommendations && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 text-center pointer-events-none">
-            <p className="text-gray-500 bg-white/90 px-4 py-2 rounded-lg shadow">
-              🔍 Search for a building to see it on the map
-            </p>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 text-center pointer-events-none px-4">
+            <div className="bg-white/95 backdrop-blur-sm px-6 py-4 rounded-2xl shadow-lg max-w-sm">
+              <p className="text-gray-600 text-sm font-medium">
+                ðŸ" Search for a building or tap Explore to discover popular locations
+              </p>
+            </div>
           </div>
         )}
 
+        {/* Steps Modal */}
         <StepsModal 
           isOpen={showStepsModal}
           onClose={() => setShowStepsModal(false)}
