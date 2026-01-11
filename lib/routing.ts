@@ -59,3 +59,21 @@ export async function getWalkingRoute(
     return null;
   }
 }
+// Calculate walking path from road to building entrance
+export function getLastMilePath(
+  roadEndPoint: [number, number],
+  buildingPoint: [number, number]
+): [number, number][] {
+  // Create a straight dotted path from road to building
+  const steps = 5; // Number of dots
+  const path: [number, number][] = [];
+  
+  for (let i = 0; i <= steps; i++) {
+    const ratio = i / steps;
+    const lat = roadEndPoint[0] + (buildingPoint[0] - roadEndPoint[0]) * ratio;
+    const lng = roadEndPoint[1] + (buildingPoint[1] - roadEndPoint[1]) * ratio;
+    path.push([lat, lng]);
+  }
+  
+  return path;
+}

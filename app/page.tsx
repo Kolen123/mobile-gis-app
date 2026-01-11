@@ -20,6 +20,9 @@ import {
   MapPin,
   Heart,
   Building2,
+  ChevronDown,
+  ChevronUp,
+  ArrowLeft,
 } from 'lucide-react';
 
 const Map = dynamic(() => import('@/components/Map').then(mod => ({ default: mod.Map })), {
@@ -79,11 +82,22 @@ function MapPageContent() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [activeRoute, setActiveRoute] = useState<Route | null>(null);
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
-  const [showStepsModal, setShowStepsModal] = useState(false);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [showRecommendations, setShowRecommendations] = useState(false);
+  const [mobileSheetPosition, setMobileSheetPosition] = useState<'minimized' | 'half' | 'full'>('half');
+  const [isMobile, setIsMobile] = useState(false);
 
-// Fix mobile viewport height
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Fix mobile viewport height
   useEffect(() => {
     const setRealViewportHeight = () => {
       const vh = window.innerHeight * 0.01;
@@ -100,37 +114,31 @@ function MapPageContent() {
     };
   }, []);
 
-  // Load buildings and recommendations on mount
   useEffect(() => {
     loadBuildings();
     loadRecommendations();
   }, []);
 
-  // Auto-show recommendations after initial load
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (visibleBuildings.length === 0 && !isNavigating && !searchQuery && !loading) {
-        setShowRecommendations(true);
-      }
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [loading]);
-
-  // Auto-show recommendations when map is cleared
-  useEffect(() => {
-    if (visibleBuildings.length === 0 && !isNavigating && !loading && !searchQuery) {
+    const hasSeenRecommendations = sessionStorage.getItem('hasSeenRecommendations');
+    
+    if (!hasSeenRecommendations && !loading) {
       const timer = setTimeout(() => {
-        setShowRecommendations(true);
-      }, 1000);
+        if (visibleBuildings.length === 0 && !isNavigating && !searchQuery) {
+          setShowRecommendations(true);
+          sessionStorage.setItem('hasSeenRecommendations', 'true');
+        }
+      }, 2000);
 
       return () => clearTimeout(timer);
-    } else {
-      if (visibleBuildings.length > 0) {
-        setShowRecommendations(false);
-      }
     }
-  }, [visibleBuildings, isNavigating, loading, searchQuery]);
+  }, [loading]);
+
+  useEffect(() => {
+    if (visibleBuildings.length > 0) {
+      setShowRecommendations(false);
+    }
+  }, [visibleBuildings]);
 
   useEffect(() => {
     if (fromId && toId && allBuildings.length > 0) {
@@ -216,8 +224,8 @@ function MapPageContent() {
     setSelectedBuildingId(null);
     setActiveRoute(null);
     setRouteCoordinates([]);
-    setShowStepsModal(false);
     setUserLocation(null);
+    setMobileSheetPosition('half');
     router.push('/');
   }
 
@@ -281,11 +289,6 @@ function MapPageContent() {
           maximumAge: 60000
         }
       );
-    } else {
-      const campusCoords: [number, number] = [-0.3959, 36.9636];
-      setUserLocation(campusCoords);
-      setMapCenter(campusCoords);
-      setMapZoom(17);
     }
   }
 
@@ -378,350 +381,440 @@ function MapPageContent() {
   function handleGetDirections(buildingId: number) {
     router.push(`/directions?to=${buildingId}`);
   }
-// Replace your RecommendationsPanel function with this
+// Desktop Navigation Sidebar - ENHANCED VERSION
+function DesktopNavigationPanel() {
+  if (!isNavigating || !activeRoute || isMobile) return null;
 
-function RecommendationsPanel() {
-  if (!showRecommendations || recommendations.length === 0) return null;
-
-  const [snapPosition, setSnapPosition] = useState<'collapsed' | 'half' | 'expanded'>('half');
-  const [isDragging, setIsDragging] = useState(false);
-  const [startY, setStartY] = useState(0);
-  const [currentY, setCurrentY] = useState(0);
-  const sheetRef = useRef<HTMLDivElement>(null);
-
-  const snapPositions = {
-    collapsed: 20,  // 20% - Show just header
-    half: 40,       // 40% - Half screen
-    expanded: 75    // 75% - Almost full screen
-  };
-
-  const currentHeight = isDragging 
-    ? Math.max(20, Math.min(80, snapPositions[snapPosition] + ((startY - currentY) / window.innerHeight) * 100))
-    : snapPositions[snapPosition];
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setIsDragging(true);
-    setStartY(e.touches[0].clientY);
-    setCurrentY(e.touches[0].clientY);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging) return;
-    e.preventDefault(); // Prevent page scroll
-    setCurrentY(e.touches[0].clientY);
-  };
-
-  const handleTouchEnd = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-
-    const diff = startY - currentY;
-    const threshold = 50;
-
-    if (Math.abs(diff) < threshold) {
-      return;
-    }
-
-    if (diff > 0) {
-      // Swiping up
-      if (snapPosition === 'collapsed') setSnapPosition('half');
-      else if (snapPosition === 'half') setSnapPosition('expanded');
-    } else {
-      // Swiping down
-      if (snapPosition === 'expanded') setSnapPosition('half');
-      else if (snapPosition === 'half') setSnapPosition('collapsed');
-    }
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setStartY(e.clientY);
-    setCurrentY(e.clientY);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setCurrentY(e.clientY);
-  };
-
-  const handleMouseUp = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-
-    const diff = startY - currentY;
-    const threshold = 50;
-
-    if (Math.abs(diff) < threshold) {
-      return;
-    }
-
-    if (diff > 0) {
-      if (snapPosition === 'collapsed') setSnapPosition('half');
-      else if (snapPosition === 'half') setSnapPosition('expanded');
-    } else {
-      if (snapPosition === 'expanded') setSnapPosition('half');
-      else if (snapPosition === 'half') setSnapPosition('collapsed');
-    }
-  };
-
-  const getMessage = () => {
-    if (searchQuery && visibleBuildings.length === 0) {
-      return {
-        title: "🔍 Nothing found?",
-        subtitle: "Try these popular locations"
-      };
-    }
-    return {
-      title: "👋 Welcome to DeKUT!",
-      subtitle: "Popular campus locations"
-    };
-  };
-
-  const message = getMessage();
-
-  const grouped: { [key: string]: typeof recommendations } = {};
-  recommendations.forEach(rec => {
-    if (!grouped[rec.type]) grouped[rec.type] = [];
-    grouped[rec.type].push(rec);
-  });
+  const distanceKm = (activeRoute.distance / 1000).toFixed(2);
+  const durationMin = Math.ceil(activeRoute.duration / 60);
+  const destination = allBuildings.find(b => b.id === selectedBuildingId);
 
   return (
-    <div 
-      ref={sheetRef}
-      className="fixed inset-x-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-2xl"
-      style={{ 
-        height: `${currentHeight}vh`,
-        maxHeight: '85vh',
-        transition: isDragging ? 'none' : 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        touchAction: 'none',
-        overflow: 'hidden'
-      }}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
-      {/* Drag Handle */}
-      <div 
-        className="w-full py-3 cursor-grab active:cursor-grabbing flex justify-center items-center select-none flex-shrink-0"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onMouseDown={handleMouseDown}
-        style={{ touchAction: 'none' }}
-      >
-        <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
-      </div>
-      
-      {/* Header - Fixed */}
-      <div className="px-4 pb-3 flex items-center justify-between border-b flex-shrink-0">
-        <div className="flex-1">
-          <h3 className="text-lg font-bold text-gray-900">
-            {message.title}
-          </h3>
-          <p className="text-sm text-gray-500">
-            📍 {recommendations.length} locations
-          </p>
-        </div>
+    <div className="absolute left-0 top-0 bottom-0 w-96 bg-gradient-to-b from-blue-50 to-white shadow-2xl z-30 flex flex-col">
+      {/* Header with gradient background */}
+      <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-6 text-white">
         <button
-          onClick={() => setShowRecommendations(false)}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+          onClick={exitNavigationMode}
+          className="flex items-center gap-2 mb-4 hover:bg-white/20 rounded-lg px-3 py-2 -ml-3 transition-colors"
         >
-          <X className="w-5 h-5 text-gray-600" />
+          <ArrowLeft className="w-5 h-5" />
+          <span className="font-medium">Exit Navigation</span>
         </button>
+        
+        <div className="flex items-center gap-4 mb-4">
+          <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
+            <Navigation className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">{destination?.name}</h2>
+            <p className="text-blue-100 text-sm flex items-center gap-1 mt-1">
+              <MapPin className="w-3 h-3" />
+              Walking directions
+            </p>
+          </div>
+        </div>
+
+        {/* Time & Distance Cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-blue-100">Duration</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-bold">{durationMin}</span>
+              <span className="text-sm text-blue-100">min</span>
+            </div>
+          </div>
+          
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-blue-100">Distance</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-bold">{distanceKm}</span>
+              <span className="text-sm text-blue-100">km</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Scrollable Content */}
-      <div 
-        className="flex-1 overflow-y-auto overscroll-contain"
-        style={{ 
-          height: `calc(${currentHeight}vh - 100px)`,
-          maxHeight: 'calc(85vh - 100px)',
-          WebkitOverflowScrolling: 'touch'
-        }}
-      >
-        {Object.entries(grouped).map(([type, items]) => (
-          <div key={type}>
-            <div className="px-4 py-2 bg-gray-50 sticky top-0 z-10">
-              <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                {type} ({items.length})
-              </h4>
-            </div>
-            
-            {items.map((rec) => (
-              <button
-                key={`${rec.source_type}-${rec.source_id}`}
-                onClick={() => {
-                  if (rec.source_type === 'building') {
-                    const building = allBuildings.find(b => b.id === rec.source_id);
-                    if (building) {
-                      setMapCenter([rec.lat, rec.lng]);
-                      setMapZoom(19);
-                      setSelectedBuildingId(rec.source_id);
-                      setVisibleBuildings([building]);
-                      setShowRecommendations(false);
-                      setSearchQuery(rec.name);
-                    }
-                  }
-                }}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 border-b flex items-center gap-3 transition-colors"
+      {/* Steps List */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 px-2">
+            Turn-by-turn directions
+          </h3>
+          
+          <div className="space-y-2">
+            {activeRoute.steps.map((step, index) => (
+              <div 
+                key={index} 
+                className="group hover:shadow-md transition-all duration-200 rounded-xl bg-white border border-gray-100 overflow-hidden"
               >
-                <div
-                  className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: `${rec.color}20` }}
-                >
-                  <span className="text-xl">{rec.icon}</span>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-gray-900 truncate">
-                    {rec.name}
-                  </h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span
-                      className="inline-block px-2 py-0.5 text-xs font-medium rounded"
-                      style={{
-                        backgroundColor: `${rec.color}20`,
-                        color: rec.color
-                      }}
-                    >
-                      {rec.category}
-                    </span>
-                    {rec.facilities_count > 0 && (
-                      <span className="text-xs text-gray-500">
-                        • {rec.facilities_count} facilities
-                      </span>
+                <div className="flex items-start gap-4 p-4">
+                  <div className="flex-shrink-0 relative">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-md group-hover:scale-110 transition-transform">
+                      {index + 1}
+                    </div>
+                    {index < activeRoute.steps.length - 1 && (
+                      <div className="absolute top-10 left-1/2 -translate-x-1/2 w-0.5 h-8 bg-gradient-to-b from-blue-200 to-transparent"></div>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0 pt-1">
+                    <p className="font-semibold text-gray-900 mb-2 leading-relaxed group-hover:text-blue-600 transition-colors">
+                      {step.instruction}
+                    </p>
+                    
+                    {step.distance > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1 text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">
+                          <span className="font-medium">{step.distance}m</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">
+                          <span className="font-medium">{Math.ceil(step.duration / 60)} min</span>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
-
-                <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
-              </button>
+              </div>
             ))}
           </div>
-        ))}
+        </div>
+
+        {/* Bottom tip */}
+        <div className="p-4 mt-4">
+          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100">
+            <p className="text-sm text-gray-700">
+              💡 <span className="font-semibold">Tip:</span> Follow the blue route on the map for guidance
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-  // ROUTE INFO PANEL
-  function RouteInfoPanel() {
-    if (!activeRoute) return null;
-    
-    const distanceKm = (activeRoute.distance / 1000).toFixed(2);
-    const durationMin = Math.ceil(activeRoute.duration / 60);
-    
-    return (
-      <div className="absolute bottom-24 left-4 right-4 z-30 max-w-md mx-auto">
-        <div className="bg-white rounded-lg shadow-xl p-4">
-          <div className="flex items-center justify-between mb-3">
+ // Mobile Navigation Bottom Sheet - ENHANCED VERSION
+function MobileNavigationSheet() {
+  if (!isNavigating || !activeRoute || !isMobile) return null;
+
+  const distanceKm = (activeRoute.distance / 1000).toFixed(2);
+  const durationMin = Math.ceil(activeRoute.duration / 60);
+  const destination = allBuildings.find(b => b.id === selectedBuildingId);
+  const nextStep = activeRoute.steps[0];
+
+  const heights = {
+    minimized: '140px',
+    half: '50vh',
+    full: '85vh'
+  };
+
+  return (
+    <>
+      {/* Top Banner - When Minimized */}
+      {mobileSheetPosition === 'minimized' && nextStep && (
+        <div className="absolute top-4 left-4 right-4 z-40">
+          <div className="bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl shadow-2xl p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-cyan-100 rounded-full">
-                <Navigation className="w-5 h-5 text-cyan-600" />
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center flex-shrink-0">
+                <Navigation className="w-6 h-6 text-white" />
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Walking Route</p>
-                <p className="font-bold text-gray-900">
-                  {distanceKm} km · {durationMin} min
-                </p>
+              <div className="flex-1 min-w-0 text-white">
+                <p className="text-xs font-medium mb-0.5 opacity-90">In {nextStep.distance}m</p>
+                <p className="font-bold text-lg line-clamp-1">{nextStep.instruction}</p>
+              </div>
+              <button 
+                onClick={() => setMobileSheetPosition('half')}
+                className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+              >
+                <ChevronUp className="w-5 h-5 text-white" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Sheet */}
+      <div 
+        className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl transition-all duration-300 flex flex-col"
+        style={{ height: heights[mobileSheetPosition] }}
+      >
+        {/* Drag Handle */}
+        <div 
+          className="w-full py-3 flex justify-center cursor-grab active:cursor-grabbing"
+          onClick={() => {
+            if (mobileSheetPosition === 'minimized') setMobileSheetPosition('half');
+            else if (mobileSheetPosition === 'half') setMobileSheetPosition('full');
+            else setMobileSheetPosition('minimized');
+          }}
+        >
+          <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
+        </div>
+
+        {/* Header */}
+        <div className="px-4 pb-3 border-b flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="p-2.5 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl shadow-md">
+                <Navigation className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-900 truncate text-lg">{destination?.name}</h3>
+                <p className="text-sm text-gray-500">Walking directions</p>
               </div>
             </div>
             <button
-              onClick={() => setShowStepsModal(true)}
-              className="text-cyan-600 text-sm font-medium hover:text-cyan-700"
+              onClick={exitNavigationMode}
+              className="p-2 hover:bg-gray-100 rounded-full flex-shrink-0 transition-colors"
             >
-              View Steps
+              <X className="w-5 h-5 text-gray-600" />
             </button>
           </div>
-          
-          <div className="space-y-2 text-sm">
-            {activeRoute.steps.slice(0, 3).map((step, index) => (
-              <div key={index} className="flex items-start gap-2 text-gray-600">
-                <span className="font-medium text-cyan-600">{index + 1}.</span>
-                <span className="line-clamp-1">{step.instruction}</span>
+
+          {/* Stats Row */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-3 border border-blue-100">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-gray-600 font-medium">Duration</span>
               </div>
-            ))}
-            {activeRoute.steps.length > 3 && (
-              <p className="text-gray-400 text-xs">
-                +{activeRoute.steps.length - 3} more steps
-              </p>
-            )}
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-gray-900">{durationMin}</span>
+                <span className="text-sm text-gray-500">min</span>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-3 border border-blue-100">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-gray-600 font-medium">Distance</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-gray-900">{distanceKm}</span>
+                <span className="text-sm text-gray-500">km</span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    );
-  }
 
-  // STEPS MODAL
-  function StepsModal({ 
-    isOpen, 
-    onClose, 
-    route 
-  }: { 
-    isOpen: boolean; 
-    onClose: () => void; 
-    route: Route | null;
-  }) {
-    if (!isOpen || !route) return null;
-
-    const distanceKm = (route.distance / 1000).toFixed(2);
-    const durationMin = Math.ceil(route.duration / 60);
-
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
-        <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg sm:w-full max-h-[85vh] flex flex-col">
-          <div className="p-6 border-b">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-bold text-gray-900">Turn-by-Turn Directions</h2>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Navigation className="w-4 h-4" />
-              <span>{distanceKm} km · {durationMin} min walk</span>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="space-y-4">
-              {route.steps.map((step, index) => (
-                <div key={index} className="flex items-start gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-cyan-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 pt-1">
-                    <p className="font-medium text-gray-900 mb-1">
-                      {step.instruction}
-                    </p>
-                    <div className="flex items-center gap-3 text-sm text-gray-500">
-                      <span>{step.distance}m</span>
-                      <span>·</span>
-                      <span>{Math.ceil(step.duration / 60)} min</span>
+        {/* Steps List - Scrollable */}
+        {mobileSheetPosition !== 'minimized' && (
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Turn-by-turn directions
+            </h4>
+            
+            <div className="space-y-2">
+              {activeRoute.steps.map((step, index) => (
+                <div key={index} className="flex items-start gap-3 p-3 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-100">
+                  <div className="flex-shrink-0 relative">
+                    <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-cyan-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
+                      {index + 1}
                     </div>
+                    {index < activeRoute.steps.length - 1 && (
+                      <div className="absolute top-9 left-1/2 -translate-x-1/2 w-0.5 h-6 bg-gradient-to-b from-blue-200 to-transparent"></div>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <p className="font-semibold text-gray-900 mb-1.5 leading-snug">{step.instruction}</p>
+                    {step.distance > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full font-medium">
+                          {step.distance}m
+                        </span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full font-medium">
+                          {Math.ceil(step.duration / 60)} min
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </div>
+        )}
+      </div>
+    </>
+  );
+}
 
-          <div className="p-4 border-t">
-            <button
-              onClick={onClose}
-              className="w-full px-6 py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors"
-            >
-              Got it!
-            </button>
+  function RecommendationsPanel() {
+    if (!showRecommendations || recommendations.length === 0) return null;
+
+    const [snapPosition, setSnapPosition] = useState<'collapsed' | 'half' | 'expanded'>('half');
+    const [isDragging, setIsDragging] = useState(false);
+    const [startY, setStartY] = useState(0);
+    const [currentY, setCurrentY] = useState(0);
+    const sheetRef = useRef<HTMLDivElement>(null);
+
+    const snapPositions = {
+      collapsed: 20,
+      half: 40,
+      expanded: 75
+    };
+
+    const currentHeight = isDragging 
+      ? Math.max(20, Math.min(80, snapPositions[snapPosition] + ((startY - currentY) / window.innerHeight) * 100))
+      : snapPositions[snapPosition];
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+      setIsDragging(true);
+      setStartY(e.touches[0].clientY);
+      setCurrentY(e.touches[0].clientY);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      setCurrentY(e.touches[0].clientY);
+    };
+
+    const handleTouchEnd = () => {
+      if (!isDragging) return;
+      setIsDragging(false);
+
+      const diff = startY - currentY;
+      const threshold = 50;
+
+      if (Math.abs(diff) < threshold) return;
+
+      if (diff > 0) {
+        if (snapPosition === 'collapsed') setSnapPosition('half');
+        else if (snapPosition === 'half') setSnapPosition('expanded');
+      } else {
+        if (snapPosition === 'expanded') setSnapPosition('half');
+        else if (snapPosition === 'half') setSnapPosition('collapsed');
+      }
+    };
+
+    const getMessage = () => {
+      if (searchQuery && visibleBuildings.length === 0) {
+        return {
+          title: "🔍 Nothing found?",
+          subtitle: "Try these popular locations"
+        };
+      }
+      return {
+        title: "👋 Welcome to DeKUT!",
+        subtitle: "Popular campus locations"
+      };
+    };
+
+    const message = getMessage();
+
+    const grouped: { [key: string]: typeof recommendations } = {};
+    recommendations.forEach(rec => {
+      if (!grouped[rec.type]) grouped[rec.type] = [];
+      grouped[rec.type].push(rec);
+    });
+
+    return (
+      <div 
+        ref={sheetRef}
+        className="fixed inset-x-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-2xl"
+        style={{ 
+          height: `${currentHeight}vh`,
+          maxHeight: '85vh',
+          transition: isDragging ? 'none' : 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          touchAction: 'none',
+          overflow: 'hidden'
+        }}
+      >
+        <div 
+          className="w-full py-3 cursor-grab active:cursor-grabbing flex justify-center items-center select-none flex-shrink-0"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
+        </div>
+        
+        <div className="px-4 pb-3 flex items-center justify-between border-b flex-shrink-0">
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-gray-900">{message.title}</h3>
+            <p className="text-sm text-gray-500">📍 {recommendations.length} locations</p>
           </div>
+          <button
+            onClick={() => setShowRecommendations(false)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+          >
+            <X className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+
+        <div 
+          className="flex-1 overflow-y-auto overscroll-contain"
+          style={{ 
+            height: `calc(${currentHeight}vh - 100px)`,
+            maxHeight: 'calc(85vh - 100px)',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {Object.entries(grouped).map(([type, items]) => (
+            <div key={type}>
+              <div className="px-4 py-2 bg-gray-50 sticky top-0 z-10">
+                <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  {type} ({items.length})
+                </h4>
+              </div>
+              
+              {items.map((rec) => (
+                <button
+                  key={`${rec.source_type}-${rec.source_id}`}
+                  onClick={() => {
+                    if (rec.source_type === 'building') {
+                      const building = allBuildings.find(b => b.id === rec.source_id);
+                      if (building) {
+                        setMapCenter([rec.lat, rec.lng]);
+                        setMapZoom(19);
+                        setSelectedBuildingId(rec.source_id);
+                        setVisibleBuildings([building]);
+                        setShowRecommendations(false);
+                        setSearchQuery(rec.name);
+                      }
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 border-b flex items-center gap-3 transition-colors"
+                >
+                  <div
+                    className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: `${rec.color}20` }}
+                  >
+                    <span className="text-xl">{rec.icon}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 truncate">{rec.name}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span
+                        className="inline-block px-2 py-0.5 text-xs font-medium rounded"
+                        style={{
+                          backgroundColor: `${rec.color}20`,
+                          color: rec.color
+                        }}
+                      >
+                        {rec.category}
+                      </span>
+                      {rec.facilities_count > 0 && (
+                        <span className="text-xs text-gray-500">
+                          • {rec.facilities_count} facilities
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
-return (
+  return (
     <div 
       className="relative w-full overflow-hidden" 
       style={{ height: 'calc(var(--vh, 1vh) * 100)' }}
@@ -729,94 +822,86 @@ return (
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="relative h-full flex flex-col">
-        {/* Navigation Active Banner */}
-        {isNavigating && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-cyan-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              <span className="font-medium text-sm">Navigation Active</span>
+        {/* Search Bar - Hidden during navigation on mobile */}
+        {(!isNavigating || !isMobile) && (
+          <div className="absolute top-0 left-0 right-0 z-30">
+            <div className="bg-white shadow-lg m-4 rounded-xl">
+              <div className="flex items-center gap-2 p-3">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Menu className="w-6 h-6 text-gray-700" />
+                </button>
+
+                <div className="flex-1 relative">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search buildings..."
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                      onFocus={() => searchQuery && setShowSearchResults(true)}
+                      disabled={isNavigating}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 text-sm"
+                    />
+                  </div>
+
+                  {showSearchResults && searchResults.length > 0 && !isNavigating && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl max-h-80 overflow-y-auto">
+                      {searchResults.map((building) => (
+                        <button
+                          key={building.id}
+                          onClick={() => selectBuilding(building)}
+                          className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0"
+                        >
+                          <div className="font-medium text-gray-900">{building.name}</div>
+                          {building.category && (
+                            <div className="text-sm text-gray-500 mt-0.5">{building.category.name}</div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+<button
+                  onClick={() => setShowRecommendations(!showRecommendations)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Recommendations"
+                >
+                  <Star className={`w-6 h-6 ${showRecommendations ? 'text-yellow-500 fill-yellow-500' : 'text-gray-700'}`} />
+                </button>
+
+                {visibleBuildings.length > 0 && !isNavigating && (
+                  <button
+                    onClick={clearMap}
+                    className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
-            <button
-              onClick={exitNavigationMode}
-              className="p-1 hover:bg-cyan-700 rounded-full transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         )}
 
-        {/* Search Bar */}
-        <div className="absolute top-0 left-0 right-0 z-30">
-          <div className="bg-white shadow-lg m-4 rounded-xl">
-            <div className="flex items-center gap-2 p-3">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Menu className="w-6 h-6 text-gray-700" />
-              </button>
+        {/* Desktop Navigation Panel */}
+        <DesktopNavigationPanel />
 
-              <div className="flex-1 relative">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search buildings..."
-                    value={searchQuery}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    onFocus={() => searchQuery && setShowSearchResults(true)}
-                    disabled={isNavigating}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 text-sm"
-                  />
-                </div>
+        {/* Mobile Navigation Sheet */}
+        <MobileNavigationSheet />
 
-                {showSearchResults && searchResults.length > 0 && !isNavigating && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl max-h-80 overflow-y-auto">
-                    {searchResults.map((building) => (
-                      <button
-                        key={building.id}
-                        onClick={() => selectBuilding(building)}
-                        className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0"
-                      >
-                        <div className="font-medium text-gray-900">
-                          {building.name}
-                        </div>
-                        {building.category && (
-                          <div className="text-sm text-gray-500 mt-0.5">
-                            {building.category.name}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+        {/* Recommendations Panel - Hidden during navigation */}
+        {!isNavigating && <RecommendationsPanel />}
 
-              <button
-                onClick={() => setShowRecommendations(!showRecommendations)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Recommendations"
-              >
-                <Star className={`w-6 h-6 ${showRecommendations ? 'text-yellow-500 fill-yellow-500' : 'text-gray-700'}`} />
-              </button>
-
-              {visibleBuildings.length > 0 && !isNavigating && (
-                <button
-                  onClick={clearMap}
-                  className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Recommendations Panel */}
-        <RecommendationsPanel />
-
-        {/* Map */}
-        <div className="flex-1">
+        {/* Map - Adjust margin for desktop navigation panel */}
+        <div 
+          className="flex-1 transition-all duration-300"
+          style={{
+            marginLeft: isNavigating && !isMobile ? '384px' : '0'
+          }}
+        >
           {loading ? (
             <div className="w-full h-full flex items-center justify-center bg-gray-100">
               <Loader2 className="w-12 h-12 animate-spin text-cyan-600" />
@@ -835,37 +920,44 @@ return (
           )}
         </div>
 
-        {/* Map Controls */}
-        <div className="absolute right-4 top-24 z-20 flex flex-col gap-2">
-          <button 
-            onClick={handleLocateMe}
-            className="bg-white p-3 rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
-            title="My Location"
-          >
-            <Locate className="w-6 h-6 text-gray-700" />
-          </button>
+        {/* Map Controls - Hidden during mobile navigation */}
+        {(!isNavigating || !isMobile) && (
+          <div className="absolute right-4 top-24 z-20 flex flex-col gap-2">
+            <button 
+              onClick={() => router.push('/directions')}
+              className="bg-cyan-600 p-3 rounded-lg shadow-lg hover:bg-cyan-700 transition-colors"
+              title="Get Directions"
+            >
+              <Navigation className="w-6 h-6 text-white" />
+            </button>
 
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             <button 
-              onClick={() => setMapZoom(prev => Math.min(prev + 1, 19))}
-              className="p-3 hover:bg-gray-50 transition-colors border-b w-full"
+              onClick={handleLocateMe}
+              className="bg-white p-3 rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+              title="My Location"
             >
-              <Plus className="w-6 h-6 text-gray-700" />
+              <Locate className="w-6 h-6 text-gray-700" />
             </button>
-            <button 
-              onClick={() => setMapZoom(prev => Math.max(prev - 1, 10))}
-              className="p-3 hover:bg-gray-50 transition-colors w-full"
-            >
-              <Minus className="w-6 h-6 text-gray-700" />
-            </button>
+
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+              <button 
+                onClick={() => setMapZoom(prev => Math.min(prev + 1, 19))}
+                className="p-3 hover:bg-gray-50 transition-colors border-b w-full"
+              >
+                <Plus className="w-6 h-6 text-gray-700" />
+              </button>
+              <button 
+                onClick={() => setMapZoom(prev => Math.max(prev - 1, 10))}
+                className="p-3 hover:bg-gray-50 transition-colors w-full"
+              >
+                <Minus className="w-6 h-6 text-gray-700" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Route Info Panel */}
-        {isNavigating && <RouteInfoPanel />}
-
-        {/* Bottom Navigation - Clean & Fixed */}
-{!isNavigating && !showRecommendations && (
+        {/* Bottom Navigation - Hidden during navigation */}
+        {!isNavigating && !showRecommendations && (
           <div 
             className="fixed left-0 right-0 z-20 bg-white border-t shadow-lg"
             style={{ 
@@ -901,44 +993,20 @@ return (
                 <Heart className="w-5 h-5" />
                 <span className="text-xs">Favorites</span>
               </button>
-              <div className="w-px h-8 bg-gray-200" />
-              
-              <button
-                onClick={() => router.push('/buildings')}
-                className="flex-1 px-4 py-3 rounded-full font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors text-sm"
-              >
-                🏛️ All Buildings
-              </button>
-              
-              <div className="w-px h-8 bg-gray-200" />
-              
-              <button
-                onClick={() => router.push('/favorites')}
-                className="flex-1 px-4 py-3 rounded-full font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors text-sm"
-              >
-                â­ Favorites
-              </button>
             </div>
           </div>
         )}
 
-        {/* Empty State Message */}
+        {/* Empty State - Hidden during navigation */}
         {visibleBuildings.length === 0 && !loading && !isNavigating && !showRecommendations && (
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 text-center pointer-events-none px-4">
             <div className="bg-white/95 backdrop-blur-sm px-6 py-4 rounded-2xl shadow-lg max-w-sm">
               <p className="text-gray-600 text-sm font-medium">
-                ðŸ" Search for a building or tap Explore to discover popular locations
+                🗺️ Search for a building or tap Explore to discover popular locations
               </p>
             </div>
           </div>
         )}
-
-        {/* Steps Modal */}
-        <StepsModal 
-          isOpen={showStepsModal}
-          onClose={() => setShowStepsModal(false)}
-          route={activeRoute}
-        />
       </div>
     </div>
   );

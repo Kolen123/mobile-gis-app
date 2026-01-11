@@ -253,3 +253,12 @@ select {
     font-size: 16px !important;
   }
 }
+@keyframes dash {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+.animate-dash {
+  animation: dash 1s linear infinite;
+}

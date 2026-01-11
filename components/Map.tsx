@@ -290,19 +290,37 @@ export function Map({
           </Popup>
         </Marker>
       )}
-
-      {/* ROUTE LINE */}
+{/* ROUTE LINE - Google Maps Style */}
       {routeCoordinates.length > 0 && (
-        <Polyline
-          positions={routeCoordinates}
-          pathOptions={{
-            color: '#0891B2',
-            weight: 5,
-            opacity: 0.8,
-            lineJoin: 'round',
-            lineCap: 'round'
-          }}
-        />
+        <>
+          {/* Main route - solid line */}
+          {routeCoordinates.length > 1 && (
+            <Polyline
+              positions={routeCoordinates.slice(0, -1)}
+              pathOptions={{
+                color: '#0891B2',
+                weight: 5,
+                opacity: 0.8,
+                lineJoin: 'round',
+                lineCap: 'round'
+              }}
+            />
+          )}
+          
+          {/* Last segment - dotted walking path */}
+          {routeCoordinates.length > 1 && (
+            <Polyline
+              positions={routeCoordinates.slice(-2)}
+              pathOptions={{
+                color: '#0891B2',
+                weight: 6,
+                opacity: 0.9,
+                dashArray: '1, 15',
+                lineCap: 'round'
+              }}
+            />
+          )}
+        </>
       )}
 
       {/* Building Markers with Enhanced Popups */}
