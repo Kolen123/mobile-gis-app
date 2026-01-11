@@ -361,9 +361,7 @@ function MapPageContent() {
   function handleGetDirections(buildingId: number) {
     router.push(`/directions?to=${buildingId}`);
   }
-
- // FIXED RecommendationsPanel Component
-// Replace the entire RecommendationsPanel function in your page.tsx
+// Replace your RecommendationsPanel function with this
 
 function RecommendationsPanel() {
   if (!showRecommendations || recommendations.length === 0) return null;
@@ -375,17 +373,15 @@ function RecommendationsPanel() {
   const sheetRef = useRef<HTMLDivElement>(null);
 
   const snapPositions = {
-    collapsed: 15,
-    half: 35,
-    expanded: 70
+    collapsed: 20,  // 20% - Show just header
+    half: 40,       // 40% - Half screen
+    expanded: 75    // 75% - Almost full screen
   };
 
-  // Calculate current height during drag
   const currentHeight = isDragging 
-    ? Math.max(15, Math.min(85, snapPositions[snapPosition] + ((startY - currentY) / window.innerHeight) * 100))
+    ? Math.max(20, Math.min(80, snapPositions[snapPosition] + ((startY - currentY) / window.innerHeight) * 100))
     : snapPositions[snapPosition];
 
-  // Touch handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     setIsDragging(true);
     setStartY(e.touches[0].clientY);
@@ -394,6 +390,7 @@ function RecommendationsPanel() {
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging) return;
+    e.preventDefault(); // Prevent page scroll
     setCurrentY(e.touches[0].clientY);
   };
 
@@ -404,12 +401,10 @@ function RecommendationsPanel() {
     const diff = startY - currentY;
     const threshold = 50;
 
-    // If movement is too small, don't change position
     if (Math.abs(diff) < threshold) {
       return;
     }
 
-    // Snap to nearest position based on drag direction
     if (diff > 0) {
       // Swiping up
       if (snapPosition === 'collapsed') setSnapPosition('half');
@@ -421,7 +416,6 @@ function RecommendationsPanel() {
     }
   };
 
-  // Mouse handlers for desktop testing
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     setStartY(e.clientY);
@@ -468,7 +462,6 @@ function RecommendationsPanel() {
 
   const message = getMessage();
 
-  // Group recommendations by type
   const grouped: { [key: string]: typeof recommendations } = {};
   recommendations.forEach(rec => {
     if (!grouped[rec.type]) grouped[rec.type] = [];
@@ -478,11 +471,13 @@ function RecommendationsPanel() {
   return (
     <div 
       ref={sheetRef}
-      className="fixed inset-x-0 bottom-0 z-30 bg-white rounded-t-3xl shadow-2xl"
+      className="fixed inset-x-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-2xl"
       style={{ 
         height: `${currentHeight}vh`,
+        maxHeight: '85vh',
         transition: isDragging ? 'none' : 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        touchAction: 'none' // Prevents scrolling while dragging
+        touchAction: 'none',
+        overflow: 'hidden'
       }}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -490,7 +485,7 @@ function RecommendationsPanel() {
     >
       {/* Drag Handle */}
       <div 
-        className="w-full py-4 cursor-grab active:cursor-grabbing flex justify-center items-center select-none"
+        className="w-full py-3 cursor-grab active:cursor-grabbing flex justify-center items-center select-none flex-shrink-0"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -500,8 +495,8 @@ function RecommendationsPanel() {
         <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
       </div>
       
-      {/* Header */}
-      <div className="px-4 pb-3 flex items-center justify-between border-b">
+      {/* Header - Fixed */}
+      <div className="px-4 pb-3 flex items-center justify-between border-b flex-shrink-0">
         <div className="flex-1">
           <h3 className="text-lg font-bold text-gray-900">
             {message.title}
@@ -512,7 +507,7 @@ function RecommendationsPanel() {
         </div>
         <button
           onClick={() => setShowRecommendations(false)}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
         >
           <X className="w-5 h-5 text-gray-600" />
         </button>
@@ -520,10 +515,11 @@ function RecommendationsPanel() {
 
       {/* Scrollable Content */}
       <div 
-        className="overflow-y-auto" 
+        className="flex-1 overflow-y-auto overscroll-contain"
         style={{ 
           height: `calc(${currentHeight}vh - 100px)`,
-          overscrollBehavior: 'contain' // Prevents parent scrolling
+          maxHeight: 'calc(85vh - 100px)',
+          WebkitOverflowScrolling: 'touch'
         }}
       >
         {Object.entries(grouped).map(([type, items]) => (
