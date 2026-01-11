@@ -906,17 +906,18 @@ function MobileNavigationSheet() {
             <div className="w-full h-full flex items-center justify-center bg-gray-100">
               <Loader2 className="w-12 h-12 animate-spin text-cyan-600" />
             </div>
-          ) : (
-            <Map
-              buildings={visibleBuildings}
-              center={mapCenter}
-              zoom={mapZoom}
-              selectedBuildingId={selectedBuildingId}
-              onBuildingClick={handleBuildingClick}
-              onGetDirections={handleGetDirections}
-              routeCoordinates={routeCoordinates}
-              userLocation={userLocation}
-            />
+         ) : (
+           <Map
+  buildings={visibleBuildings}
+  center={mapCenter}
+  zoom={mapZoom}
+  selectedBuildingId={selectedBuildingId}
+  onBuildingClick={handleBuildingClick}
+  onGetDirections={handleGetDirections}
+  routeCoordinates={routeCoordinates}
+  userLocation={userLocation}
+  hasWalkingPath={activeRoute?.hasWalkingPath}
+/>
           )}
         </div>
 

@@ -1,6 +1,6 @@
 // components/Map.tsx
 'use client';
-import { Polyline } from 'react-leaflet';
+import { Polyline, CircleMarker } from 'react-leaflet';
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -42,6 +42,7 @@ interface MapProps {
   onGetDirections?: (buildingId: number) => void;
   routeCoordinates?: [number, number][];
   userLocation?: [number, number] | null;
+  hasWalkingPath?: boolean;
 }
 
 // Custom marker icon creator for buildings
@@ -204,6 +205,7 @@ function MapUpdater({
   
   return null;
 }
+
 function ZoomUpdater({ zoom }: { zoom: number }) {
   const map = useMap();
   
@@ -215,6 +217,7 @@ function ZoomUpdater({ zoom }: { zoom: number }) {
   
   return null;
 }
+
 export function Map({ 
   buildings, 
   center = [-0.3970, 36.9580], 
@@ -223,7 +226,8 @@ export function Map({
   onBuildingClick,
   onGetDirections,
   routeCoordinates = [],
-  userLocation = null
+  userLocation = null,
+  hasWalkingPath = false
 }: MapProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -264,7 +268,8 @@ export function Map({
         selectedBuildingId={selectedBuildingId}
         buildings={buildings}
       />
-<ZoomUpdater zoom={zoom} />
+      <ZoomUpdater zoom={zoom} />
+      
       {/* User Location Marker - Always show when we have user location */}
       {userLocation && (
         <Marker
@@ -290,36 +295,74 @@ export function Map({
           </Popup>
         </Marker>
       )}
-{/* ROUTE LINE - Google Maps Style */}
-      {routeCoordinates.length > 0 && (
+
+      {/* ROUTE LINE - Enhanced with walking paths */}
+      {routeCoordinates && routeCoordinates.length > 0 && (
         <>
-          {/* Main route - solid line */}
-          {routeCoordinates.length > 1 && (
-            <Polyline
-              positions={routeCoordinates.slice(0, -1)}
-              pathOptions={{
-                color: '#0891B2',
-                weight: 5,
-                opacity: 0.8,
-                lineJoin: 'round',
-                lineCap: 'round'
-              }}
-            />
-          )}
+          {/* Main solid route */}
+          <Polyline
+            positions={routeCoordinates}
+            pathOptions={{
+              color: '#2563eb',
+              weight: 5,
+              opacity: 0.8,
+              lineJoin: 'round',
+              lineCap: 'round'
+            }}
+          />
           
-          {/* Last segment - dotted walking path */}
-          {routeCoordinates.length > 1 && (
-            <Polyline
-              positions={routeCoordinates.slice(-2)}
-              pathOptions={{
-                color: '#0891B2',
-                weight: 6,
-                opacity: 0.9,
-                dashArray: '1, 15',
-                lineCap: 'round'
-              }}
-            />
-          )}
+         {/* Dotted walking paths at start and end */}
+{hasWalkingPath && (
+  <>
+    {/* Origin to road - dotted green */}
+    <Polyline
+      positions={routeCoordinates.slice(0, 5)} // First 5 points
+      pathOptions={{
+        color: '#10b981',
+        weight: 4,
+        opacity: 0.7,
+        dashArray: '10, 10', // Creates dots
+        lineCap: 'round'
+      }}
+    />
+    
+    {/* Road to destination - dotted green */}
+    <Polyline
+      positions={routeCoordinates.slice(-5)} // Last 5 points
+      pathOptions={{
+        color: '#10b981',
+        weight: 4,
+        opacity: 0.7,
+        dashArray: '10, 10', // Creates dots
+        lineCap: 'round'
+      }}
+    />
+  </>
+)}
+          
+          {/* Start marker - green circle */}
+          <CircleMarker
+            center={routeCoordinates[0]}
+            radius={8}
+            pathOptions={{
+              fillColor: '#10b981',
+              fillOpacity: 1,
+              color: 'white',
+              weight: 3
+            }}
+          />
+          
+          {/* End marker - red circle */}
+          <CircleMarker
+            center={routeCoordinates[routeCoordinates.length - 1]}
+            radius={8}
+            pathOptions={{
+              fillColor: '#ef4444',
+              fillOpacity: 1,
+              color: 'white',
+              weight: 3
+            }}
+          />
         </>
       )}
 
