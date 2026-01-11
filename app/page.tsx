@@ -83,6 +83,23 @@ function MapPageContent() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [showRecommendations, setShowRecommendations] = useState(false);
 
+// Fix mobile viewport height
+  useEffect(() => {
+    const setRealViewportHeight = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+    
+    setRealViewportHeight();
+    window.addEventListener('resize', setRealViewportHeight);
+    window.addEventListener('orientationchange', setRealViewportHeight);
+    
+    return () => {
+      window.removeEventListener('resize', setRealViewportHeight);
+      window.removeEventListener('orientationchange', setRealViewportHeight);
+    };
+  }, []);
+
   // Load buildings and recommendations on mount
   useEffect(() => {
     loadBuildings();
@@ -704,8 +721,11 @@ function RecommendationsPanel() {
     );
   }
 
-  return (
-    <div className="relative h-screen w-full overflow-hidden">
+return (
+    <div 
+      className="relative w-full overflow-hidden" 
+      style={{ height: 'calc(var(--vh, 1vh) * 100)' }}
+    >
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="relative h-full flex flex-col">
@@ -845,16 +865,42 @@ function RecommendationsPanel() {
         {isNavigating && <RouteInfoPanel />}
 
         {/* Bottom Navigation - Clean & Fixed */}
-        {!isNavigating && (
-          <div className="absolute bottom-0 left-0 right-0 z-20 bg-white border-t safe-area-bottom">
-            <div className="flex items-center justify-around py-3 px-4">
+{!isNavigating && !showRecommendations && (
+          <div 
+            className="fixed left-0 right-0 z-20 bg-white border-t shadow-lg"
+            style={{ 
+              bottom: 0,
+              paddingBottom: 'max(env(safe-area-inset-bottom), 12px)'
+            }}
+          >
+            <div className="flex items-center justify-around py-3 px-4 h-16">
               <button
-                onClick={() => setShowRecommendations(!showRecommendations)}
-                className="flex-1 px-4 py-3 rounded-full font-medium text-cyan-600 hover:bg-cyan-50 active:bg-cyan-100 transition-colors text-sm"
+                onClick={() => setShowRecommendations(true)}
+                className="flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-lg font-medium text-cyan-600 hover:bg-cyan-50 active:bg-cyan-100 transition-colors"
               >
-                ðŸ" Explore
+                <Star className="w-5 h-5" />
+                <span className="text-xs">Explore</span>
               </button>
               
+              <div className="w-px h-8 bg-gray-200" />
+              
+              <button
+                onClick={() => router.push('/buildings')}
+                className="flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+              >
+                <Building2 className="w-5 h-5" />
+                <span className="text-xs">Buildings</span>
+              </button>
+              
+              <div className="w-px h-8 bg-gray-200" />
+              
+              <button
+                onClick={() => router.push('/favorites')}
+                className="flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+              >
+                <Heart className="w-5 h-5" />
+                <span className="text-xs">Favorites</span>
+              </button>
               <div className="w-px h-8 bg-gray-200" />
               
               <button
