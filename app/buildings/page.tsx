@@ -122,7 +122,7 @@ export default function BuildingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header - Beautiful cyan gradient like your old work */}
       <div className="bg-cyan-600 text-white">
         <div className="px-4 py-4">
